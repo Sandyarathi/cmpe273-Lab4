@@ -1,4 +1,1 @@
-cmpe273-lab6
-============
-
-CMPE 273 Lab 6 Baseline
+The goal of this lab is to understand how Conflict-free Replicated Data Type (CRDT) works and to implement a POC of CRDT.

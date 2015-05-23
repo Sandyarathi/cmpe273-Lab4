@@ -1,48 +1,88 @@
 package edu.sjsu.cmpe.cache.client;
-import java.util.Map;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import com.mashape.unirest.http.HttpResponse;
+import com.mashape.unirest.http.JsonNode;
 
 public class Client {
-
-    public static void main(String[] args) throws Exception {
-    	CRDTClient cdrdClient = new CRDTClient();
-    	int successCount = cdrdClient.put(1, "a");
-    	
-    	 try {
-             Thread.sleep(500);                 //1000 milliseconds is one second.
-         } catch(InterruptedException ex) {
-             Thread.currentThread().interrupt();
-         }
-         
-    	 System.out.println("successCount value "+successCount);
-    	if(successCount<=2)
-    	{
-          
-    		 int deletValue = cdrdClient.delete(1);
-    	     System.out.println("delete(1) => " + deletValue);
+	private static CacheServiceInterface cache1 = null;
+	private static CacheServiceInterface cache2 = null;
+	private static CacheServiceInterface cache3 = null;
+	
+    public static void main(String[] args) {
+    	try {
+    		System.out.println("Starting Cache Client...");
     		
-    	}
-        System.out.println("Starting Cache Client...");
-        CacheServiceInterface cache = new DistributedCacheService(
-                "http://localhost:3000");
-
-      //  cache.put(1, "foo");
-      //  System.out.println("put(1 => foo)");
-
-        //String value = cache.get(12);
- 
+            cache1 = new DistributedCacheService("http://localhost:3000");
+            cache2 = new DistributedCacheService("http://localhost:3001");
+            cache3 = new DistributedCacheService("http://localhost:3002");
+            
+	    	if (args.length > 0) {
+	    		if (args[0].equals("write")) {
+	    			write();
+	    		} else if (args[0].equals("read")) {
+	    			CRDTClient.readOnRepair(cache1, cache2, cache3);
+	    		}
+	    	}
+	    	
+	    	System.out.println("Exiting Cache Client...");
+    	} catch (Exception e) {
+    		e.printStackTrace();
+    	}        
+    }
+    
+    public static void write() throws Exception {       
+        long key = 1;
+        String value = "a";
+        
+        Future<HttpResponse<JsonNode>> future1 = cache1.put(key, value);        
+        Future<HttpResponse<JsonNode>> future2 = cache2.put(key, value);
+        Future<HttpResponse<JsonNode>> future3 = cache3.put(key, value);
+        
+        final CountDownLatch countDownLatch = new CountDownLatch(3);
+        
         try {
-            Thread.sleep(2000);                 //1000 milliseconds is one second.
-        } catch(InterruptedException ex) {
-            Thread.currentThread().interrupt();
+        	future1.get();
+        } catch (Exception e) {
+        	//e.printStackTrace();
+        } finally {
+        	countDownLatch.countDown();
         }
         
-        Map<String, Integer> getMap = cdrdClient.get(1);
-        if(getMap.containsValue(2))
-        {
-        	cdrdClient.put(1, "a");
+        try {
+        	future2.get();
+        } catch (Exception e) {
+        	//e.printStackTrace();
+        } finally {
+        	countDownLatch.countDown();
+        }
+        
+        try {
+        	future3.get();
+        } catch (Exception e) {
+        	//e.printStackTrace();
+        } finally {
+        	countDownLatch.countDown();
         }
 
-        System.out.println("Existing Cache Client...");
+        countDownLatch.await();
+        
+        if (DistributedCacheService.successCount.intValue() < 2) {	        	
+        	cache1.delete(key);
+        	cache2.delete(key);
+        	cache3.delete(key);
+        } else {
+        	cache1.get(key);
+        	cache2.get(key);
+        	cache3.get(key);
+        	Thread.sleep(1000);
+        	System.out.println("Result from Server A is: " + cache1.getValue());
+    	    System.out.println("Result from Server B is: " + cache2.getValue());
+    	    System.out.println("Result from Server C is: " + cache3.getValue());
+        }
+        DistributedCacheService.successCount = new AtomicInteger();
     }
-
 }

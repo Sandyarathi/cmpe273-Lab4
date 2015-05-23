@@ -1,186 +1,84 @@
 package edu.sjsu.cmpe.cache.client;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import com.mashape.unirest.http.HttpResponse;
-import com.mashape.unirest.http.JsonNode;
-import com.mashape.unirest.http.Unirest;
-import com.mashape.unirest.http.async.Callback;
-import com.mashape.unirest.http.exceptions.UnirestException;
 
 public class CRDTClient {
-	
-	private ArrayList<String> servers;
-	int code;
-	public AtomicInteger successVar;
-	public AtomicInteger getSuccessVar;
-	Map<String, Integer> m;
-	
-	public CRDTClient() {
-
-        servers = new ArrayList(3);
-        servers.add("http://localhost:3000");
-        servers.add("http://localhost:3001");
-        servers.add("http://localhost:3002");
+    public static void readOnRepair(CacheServiceInterface param1, CacheServiceInterface param2, 
+    		CacheServiceInterface param3) throws Exception {
+    	CacheServiceInterface cache1  = param1;
+    	CacheServiceInterface cache2  = param2;
+    	CacheServiceInterface cache3  = param3;
+    	
+        long key = 1;
+        String value = "a";
+        
+        cache1.put(key, value);
+        cache2.put(key, value);
+        cache3.put(key, value);
+        
+        System.out.println("Setting value a step");
+        Thread.sleep(30000);
+        
+        cache1.get(1);
+	    cache2.get(1);
+	    cache3.get(1);
+	        
+	    System.out.println("Getting value a step");
+	    Thread.sleep(1000);
+	    
+	    System.out.println("Result from Server A is: " + cache1.getValue());
+	    System.out.println("Result from Server B is: " + cache2.getValue());
+	    System.out.println("Result from Server C is: " + cache3.getValue());
+        
+        value = "b";
+        cache1.put(key, value);
+        cache2.put(key, value);
+        cache3.put(key, value);
+        
+        System.out.println("Setting value b step");
+        Thread.sleep(30000);
+	        
+	    cache1.get(1);
+	    cache2.get(1);
+	    cache3.get(1);
+	        
+	    System.out.println("Getting value b step");
+	    Thread.sleep(1000);
+	    
+	    System.out.println("Result from Server A is: " + cache1.getValue());
+	    System.out.println("Result from Server B is: " + cache2.getValue());
+	    System.out.println("Result from Server C is: " + cache3.getValue());
+	        
+	    String[] values = {cache1.getValue(), cache2.getValue(), cache3.getValue()};
+	    
+	    Map<String, Integer> map = new HashMap<String, Integer>();
+	    String majority = null;
+	    for (String val : values) {
+	        Integer count = map.get(val);	        
+	        map.put(val, count != null ? count+1 : 1);
+	        if (map.get(val) > values.length / 2) {
+	        	majority = val;
+	        	break;
+	        }	
+	    }
+	    
+	    cache1.put(key, majority);
+        cache2.put(key, majority);
+        cache3.put(key, majority);
+        
+        System.out.println("Correcting value b step");
+	    Thread.sleep(1000);
+	    
+	    cache1.get(key);
+        cache2.get(key);
+        cache3.get(key);
+        
+        System.out.println("Getting again value b step");
+	    Thread.sleep(1000);
+	    
+	    System.out.println("Result from Server A is: " + cache1.getValue());
+	    System.out.println("Result from Server B is: " + cache2.getValue());
+	    System.out.println("Result from Server C is: " + cache3.getValue());
     }
-	
-	public int put(long key, String value) {
-		
-		successVar = new AtomicInteger();
-		
-		for (final String serverUrl : servers) {
-			
-			try {
-	             Thread.sleep(100);                 //1000 milliseconds is one second.
-	         	Future<HttpResponse<JsonNode>> future = Unirest.put(serverUrl + "/cache/{key}/{value}")
-	      			  .header("accept", "application/json")
-	      			  .routeParam("key", Long.toString(key))
-	                    .routeParam("value", value)
-	      			  .asJsonAsync(new Callback<JsonNode>() {
-
-	      			    public void failed(UnirestException e) {
-	      			        System.out.println("The request has failed for Post"+serverUrl);
-	      			    }
-
-	      			    public void completed(HttpResponse<JsonNode> response) {
-	      			         code = response.getStatus();
-	      			        // Map<String, String> headers = response.getHeaders();
-	      			        // JsonNode body = response.getBody();
-	      			        // InputStream rawBody = response.getRawBody();
-	      			         System.out.println("In completion for Post"+code);
-	      			         if(code == 200)
-	      			         {
-	      			        	// successVar++;
-	      			        	 successVar.incrementAndGet();
-	      			        	 System.out.println("In code for Post"+successVar);
-	      			         }
-	      			         
-	      			    }
-
-	      			    public void cancelled() {
-	      			        System.out.println("The request has been cancelled");
-	      			    }
-
-	      			});	
-	         } catch(InterruptedException ex) {
-	             Thread.currentThread().interrupt();
-	         }
-
-
-			
-		}
-		//return successVar;
-		try {
-            Thread.sleep(50);                 //1000 milliseconds is one second.
-        } catch(InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
-		return (int)successVar.floatValue();
-	
-	}
-	
-	
-	public Map<String, Integer> get(long key) {
-		
-		getSuccessVar = new AtomicInteger();
-		m = new HashMap<String, Integer>();
-		
-	           
-	    		for (final String serverUrl : servers) {
-	    			try {
-	    	            Thread.sleep(150); 
-	    			Future<HttpResponse<JsonNode>> future  = Unirest.get(serverUrl + "/cache/{key}")
-	                        .header("accept", "application/json")
-	                        .routeParam("key", Long.toString(key))
-	                        .asJsonAsync(new Callback<JsonNode>(){
-
-	    			    public void failed(UnirestException e) {
-	    			        System.out.println("The request has failed");
-	    			    }
-
-	    			    public void completed(HttpResponse<JsonNode> response) {
-	    			         code = response.getStatus();
-	    			        // Map<String, String> headers = response.getHeaders();
-	    			        // JsonNode body = response.getBody();
-	    			        // InputStream rawBody = response.getRawBody();
-	    			         String value = response.getBody().getObject().getString("value");
-	    			         System.out.println("In completion for GET"+serverUrl+" "+code);
-	    			         if(code == 200)
-	    			         {
-	    			        	// successVar++;
-	    			        	int tempVar = getSuccessVar.incrementAndGet();
-	    			        	 m.put(response.getBody().getObject().getString("value"), tempVar);
-	    			        	 System.out.println("In code for GET"+successVar+" Map thing"+m.values());
-	    			         }
-	    			         
-	    			    }
-
-	    			    public void cancelled() {
-	    			        System.out.println("The request has been cancelled");
-	    			    }
-
-	    			});	
-	    			
-	    		}//1000 milliseconds is one second.
-	    			catch(InterruptedException ex) {
-	    	            Thread.currentThread().interrupt();
-	        } 
-	        }
-		
-
-		//return successVar;
-		try {
-            Thread.sleep(50);                 //1000 milliseconds is one second.
-        } catch(InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
-		return m;
-	
-	}
-	
-	public int delete(long key) {
-		
-		for (final String serverUrl : servers) {
-			Future<HttpResponse<JsonNode>> future  = Unirest.delete(serverUrl + "/cache/{key}")
-                    .header("accept", "application/json")
-                    .routeParam("key", Long.toString(key))
-                    .asJsonAsync(new Callback<JsonNode>(){
-
-			    public void failed(UnirestException e) {
-			        System.out.println("The request has failed for DELETE"+serverUrl);
-			    }
-
-			    public void completed(HttpResponse<JsonNode> response) {
-			         code = response.getStatus();
-			        // Map<String, String> headers = response.getHeaders();
-			        // JsonNode body = response.getBody();
-			        // InputStream rawBody = response.getRawBody();
-			         String value = response.getBody().getObject().getString("value");
-			         System.out.println("In completion for DELETE"+code);
-			         if(code == 201)
-			         {
-			        	// successVar++;
-			        	 successVar.incrementAndGet();
-			        	 System.out.println("In code"+successVar);
-			         }
-			         
-			    }
-
-			    public void cancelled() {
-			        System.out.println("The request has been cancelled");
-			    }
-
-			});	
-			
-		}
-		//return successVar;
-
-		return (int)successVar.floatValue();
-	
-	}
-
 }
